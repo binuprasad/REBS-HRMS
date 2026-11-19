@@ -79,8 +79,9 @@ void main() {
     test('2. Repeated submission or retry does not create duplicate attendance', () async {
       final now = DateTime.now();
       final todayStr = DateTimeUtils.toDateString(now);
+      const testClientEventId = 'test-uuid-idempotency-key-001';
 
-      // Simulate existing check-in already recorded for today
+      // Part A: Duplicate check-in attempt on the same day is rejected
       final existingRecord = AttendanceRecordModel(
         date: todayStr,
         status: 'CHECKED_IN',
@@ -92,7 +93,6 @@ void main() {
       when(() => mockLocal.getAttendanceRecordByDate(todayStr))
           .thenAnswer((_) async => existingRecord);
 
-      // Second check-in attempt on the same day must be rejected with ConflictFailure
       expect(
         () => repository.checkIn(latitude: 12.971598, longitude: 77.594566),
         throwsA(isA<ConflictFailure>().having(
@@ -102,16 +102,62 @@ void main() {
         )),
       );
 
-      // Verify no duplicate record or event was saved
-      verifyNever(() => mockLocal.saveEvent(any()));
+      // Part B: Retry with the exact same clientEventId (after timeout) does not duplicate
+      when(() => mockNetwork.isConnected).thenAnswer((_) async => true);
+
+      final retryEvent = AttendanceEventModel(
+        clientEventId: testClientEventId,
+        employeeId: 'EMP-001',
+        type: AttendanceEventType.checkIn,
+        timestamp: now,
+        latitude: 12.971598,
+        longitude: 77.594566,
+        syncStatus: SyncStatus.pendingSync,
+      );
+
+      when(() => mockLocal.getPendingEvents())
+          .thenAnswer((_) async => [retryEvent]);
+
+      int serverCallCount = 0;
+      when(() => mockRemote.submitAttendanceEvent(any()))
+          .thenAnswer((_) async {
+        serverCallCount++;
+        // Server idempotency recognizes clientEventId and returns existing committed event
+        return {
+          'success': true,
+          'event': {
+            'eventId': 'srv-existing-record-101',
+            'clientEventId': testClientEventId,
+          },
+        };
+      });
+
+      when(() => mockRemote.getAttendanceHistory(month: any(named: 'month')))
+          .thenAnswer((_) async => []);
+      when(() => mockLocal.cacheAttendanceRecords(any()))
+          .thenAnswer((_) async {});
+
+      final syncResult = await repository.syncPendingEvents();
+
+      expect(serverCallCount, equals(1));
+      expect(syncResult.syncedCount, equals(1));
+      expect(syncResult.rejectedCount, equals(0));
+
+      // Verifies the event was updated to Synced without creating a new record
+      verify(() => mockLocal.updateEvent(any(that: isA<AttendanceEventModel>().having(
+            (e) => e.clientEventId,
+            'clientEventId',
+            equals(testClientEventId),
+          )))).called(1);
     });
 
-    test('3. Pending attendance survives persistence and can be synchronized in order (FIFO)', () async {
+    test('3. Pending attendance survives persistence across repository re-initialization and syncs in strict FIFO order', () async {
       when(() => mockNetwork.isConnected).thenAnswer((_) async => true);
 
       final checkInTime = DateTime(2026, 11, 19, 9, 0, 0);
       final checkOutTime = DateTime(2026, 11, 19, 18, 0, 0);
 
+      // Two events were saved offline during an earlier app session:
       final pendingCheckIn = AttendanceEventModel(
         clientEventId: 'uuid-pending-in',
         employeeId: 'EMP-001',
@@ -132,9 +178,23 @@ void main() {
         syncStatus: SyncStatus.pendingSync,
       );
 
-      // Return pending events in chronological order
+      // Local persistent storage returns both pending events sorted by timestamp
       when(() => mockLocal.getPendingEvents())
           .thenAnswer((_) async => [pendingCheckIn, pendingCheckOut]);
+
+      // SIMULATE APP RESTART / RE-INITIALIZATION:
+      // A brand new repository instance is created, re-binding to persistent localDataSource
+      final restartedRepository = AttendanceRepositoryImpl(
+        remoteDataSource: mockRemote,
+        localDataSource: mockLocal,
+        networkInfo: mockNetwork,
+      );
+
+      // Confirm pending events survived persistence
+      final pendingBeforeSync = await restartedRepository.getPendingSyncEvents();
+      expect(pendingBeforeSync.length, equals(2));
+      expect(pendingBeforeSync.first.type, equals(AttendanceEventType.checkIn));
+      expect(pendingBeforeSync.last.type, equals(AttendanceEventType.checkOut));
 
       final callOrder = <String>[];
 
@@ -153,17 +213,18 @@ void main() {
       when(() => mockLocal.cacheAttendanceRecords(any()))
           .thenAnswer((_) async {});
 
-      final syncResult = await repository.syncPendingEvents();
+      // Trigger sync on the newly initialized repository instance
+      final syncResult = await restartedRepository.syncPendingEvents();
 
       // Verify both events succeeded
       expect(syncResult.syncedCount, equals(2));
       expect(syncResult.rejectedCount, equals(0));
       expect(syncResult.hasFailures, isFalse);
 
-      // Strict FIFO ordering: CHECK_IN was submitted BEFORE CHECK_OUT!
+      // Strict FIFO chronological ordering: Check-In dispatched BEFORE Check-Out!
       expect(callOrder, equals(['CHECK_IN', 'CHECK_OUT']));
 
-      // Verify that localDataSource updated both events to Synced
+      // Verify that local persistent storage updated both events to Synced
       verify(() => mockLocal.updateEvent(any(that: isA<AttendanceEventModel>().having(
             (e) => e.syncStatus,
             'syncStatus',
