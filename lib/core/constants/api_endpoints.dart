@@ -1,6 +1,3 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
-
 class ApiEndpoints {
   // Dynamically detect default base URL based on platform
   static String get defaultBaseUrl {
