@@ -1,0 +1,17 @@
+{
+  "name": "rebs-hrms-mock-server",
+  "version": "1.0.0",
+  "description": "Standalone mock HTTP server for REBS HRMS with scenario controls and idempotency support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "mock",
+    "hrms",
+    "flutter",
+    "rebs"
+  ],
+  "author": "REBS Mobile Engineering",
+  "license": "ISC"
+}
