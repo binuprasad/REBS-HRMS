@@ -157,12 +157,16 @@ class _SettingsDebugModalState extends State<SettingsDebugModal> {
               runSpacing: 6,
               children: [
                 ActionChip(
-                  label: const Text('10.0.2.2:8080 (Emulator)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => setState(() => _urlController.text = 'http://10.0.2.2:8080'),
+                  label: const Text('localhost:8080 (ADB Reverse)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => setState(() => _urlController.text = 'http://localhost:8080'),
                 ),
                 ActionChip(
-                  label: const Text('localhost:8080', style: TextStyle(fontSize: 11)),
-                  onPressed: () => setState(() => _urlController.text = 'http://localhost:8080'),
+                  label: const Text('192.168.43.180:8080 (LAN)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => setState(() => _urlController.text = 'http://192.168.43.180:8080'),
+                ),
+                ActionChip(
+                  label: const Text('10.0.2.2:8080 (Emulator)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => setState(() => _urlController.text = 'http://10.0.2.2:8080'),
                 ),
               ],
             ),
