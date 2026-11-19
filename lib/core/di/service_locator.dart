@@ -46,7 +46,7 @@ Future<void> initServiceLocator() async {
   sl.registerLazySingleton<HiveService>(() => HiveService());
   sl.registerLazySingleton<Connectivity>(() => Connectivity());
   sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
-  sl.registerLazySingleton<DioClient>(() => DioClient());
+  sl.registerLazySingleton<DioClient>(() => DioClient(hiveService: sl()));
   sl.registerLazySingleton<LocationService>(() => LocationServiceImpl(hiveService: sl()));
 
   // 2. Dashboard Feature

@@ -1,30 +1,50 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:rebs_hrms/main.dart';
+import 'package:rebs_hrms/core/widgets/offline_banner.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('Widget Tests - Offline & Status States', () {
+    testWidgets('OfflineBanner renders offline message and triggers retry', (WidgetTester tester) async {
+      bool retryPressed = false;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OfflineBanner(
+              message: 'Viewing cached dashboard data while offline.',
+              onRetry: () {
+                retryPressed = true;
+              },
+            ),
+          ),
+        ),
+      );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      // Verify that offline icon and message are rendered
+      expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+      expect(find.text('Viewing cached dashboard data while offline.'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      // Tap Retry button and verify callback
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+
+      expect(retryPressed, isTrue);
+    });
+
+    testWidgets('OfflineBanner without retry does not show retry button', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: OfflineBanner(
+              message: 'Offline mode active.',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Offline mode active.'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+    });
   });
 }

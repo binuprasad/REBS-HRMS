@@ -1,15 +1,19 @@
 import 'package:dio/dio.dart';
 import '../constants/api_endpoints.dart';
 import '../constants/app_constants.dart';
+import '../storage/hive_service.dart';
 import 'error_interceptor.dart';
 import 'logging_interceptor.dart';
 
 class DioClient {
   late final Dio _dio;
   String _baseUrl;
+  final HiveService? hiveService;
 
-  DioClient({String? baseUrl, Dio? customDio})
-      : _baseUrl = baseUrl ?? ApiEndpoints.defaultBaseUrl {
+  DioClient({String? baseUrl, Dio? customDio, this.hiveService})
+      : _baseUrl = baseUrl ??
+            (hiveService?.settingsBox.get('api_base_url') as String?) ??
+            ApiEndpoints.defaultBaseUrl {
     _dio = customDio ??
         Dio(
           BaseOptions(
@@ -33,9 +37,12 @@ class DioClient {
   Dio get dio => _dio;
   String get baseUrl => _baseUrl;
 
-  void updateBaseUrl(String newBaseUrl) {
+  Future<void> updateBaseUrl(String newBaseUrl) async {
     _baseUrl = newBaseUrl;
     _dio.options.baseUrl = newBaseUrl;
+    if (hiveService != null) {
+      await hiveService!.settingsBox.put('api_base_url', newBaseUrl);
+    }
   }
 
   Future<Response<T>> get<T>(
